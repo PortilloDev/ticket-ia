@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  pgsql:
+    image: postgres:16
+    container_name: ticket-ai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ticket_ai
+      POSTGRES_USER: ticket_ai
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+volumes:
+  db-data:
+
+
