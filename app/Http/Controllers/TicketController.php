@@ -4,34 +4,52 @@ namespace App\Http\Controllers;
 
 use App\Services\TicketAIService;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 
 class TicketController extends Controller
 {
-    public function handle(Request $request, TicketAIService $ai)
+    public function handle(Request $request, TicketAIService $ai): JsonResponse
     {
-        $ticket = $request->input('ticket'); // Ej: "No me va el login"
+        // Validación básica
+        $request->validate([
+            'ticket' => 'required|string|min:5|max:1000'
+        ]);
+
+        $ticket = $request->input('ticket');
 
         // PASO 1: ROUTING (El Portero)
-        // Gastamos muy poco para saber de qué va el tema.
+        // Detectamos intención de forma barata
         $tipo = $ai->enrutarTicket($ticket);
 
-        if ($tipo === 'SIMPLE_FAQ') {
-            // Caso barato: No llamamos al modelo grande ni cargamos el manual.
-            // Podríamos devolver un texto predefinido o usar un modelo muy pequeño.
+        // Si el router no devuelve un valor válido, lo tratamos como off-topic
+        if ($tipo === 'OFF_TOPIC') {
             return response()->json([
-                'source' => 'Router',
-                'message' => 'Parece una duda rápida. ¿Has mirado nuestra página de ayuda?'
+                'status' => 'rejected',
+                'message' => 'Soy un asistente especializado en soporte de TicketAI. No puedo ayudarte con consultas fuera de este tema.'
+            ], 400);
+        }
+        // Si el router falla o no devuelve lo esperado, por seguridad lo tratamos como complejo
+        if (!in_array($tipo, ['SIMPLE_FAQ', 'COMPLEX_ISSUE'])) {
+            $tipo = 'COMPLEX_ISSUE';
+        }
+
+        if ($tipo === 'SIMPLE_FAQ') {
+            return response()->json([
+                'status' => 'success',
+                'router_decision' => $tipo,
+                'data' => [
+                    'message' => '¡Hola! Veo que es una consulta rápida. ¿Has probado a mirar en nuestro FAQ o resetear tu contraseña?'
+                ]
             ]);
         }
 
-        // PASO 2: SOLVER (El Experto)
-        // Solo si es complejo, gastamos la bala de plata.
-        // Aquí entra en juego el KV Cache del manual.
-        $solucion = $ai->resolverTicketComplejo($ticket);
+        // PASO 2: SOLVER (El Experto con RAG)
+        $analisis = $ai->resolverTicketComplejo($ticket);
 
         return response()->json([
-            'source' => 'Expert AI',
-            'analysis' => $solucion
+            'status' => 'success',
+            'router_decision' => $tipo,
+            'data' => $analisis
         ]);
     }
 }
